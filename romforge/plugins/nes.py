@@ -5,6 +5,7 @@ from ..utils.disasm6502 import disassemble
 from ..utils.nes_analysis import scan_entropy_regions, classify_regions, write_analysis_report
 from ..utils.nes_audio import scan_apu_hits, write_audio_summary
 from ..utils.nes_graphics import render_metatile_sheet, render_pattern_table_color
+from ..utils.nes_metasprite import scan_metasprite_candidates
 
 MAPPER_NAMES={0:'NROM',1:'MMC1',2:'UxROM',3:'CNROM',4:'MMC3',7:'AxROM',9:'MMC2',10:'MMC4',11:'Color Dreams',66:'GxROM',71:'Camerica'}
 
@@ -69,10 +70,16 @@ class NESPlugin(ROMPlugin):
             w=csv.writer(f); w.writerow(['prg_offset','source_guess','target'])
             for off,v in pointers: w.writerow([f'0x{off:04X}',f'${cpu_base+off:04X}',f'${v:04X}'])
 
+        metasprites = scan_metasprite_candidates(prg)
+        (output/'Graphics/metasprite_candidates.json').write_text(
+            json.dumps([item.to_dict() for item in metasprites[:256]], indent=2),
+            encoding='utf-8'
+        )
+
         entropy_rows=scan_entropy_regions(prg,cpu_base)
         regions=classify_regions(prg,cpu_base,[(x[0],x[1],x[2]) for x in apu_hits],[(x[0],x[1],x[2]) for x in ppu_hits])
         (output/'Analysis/regions.json').write_text(json.dumps([r.to_dict() for r in regions],indent=2),encoding='utf-8')
         (output/'Analysis/entropy_map.json').write_text(json.dumps(entropy_rows,indent=2),encoding='utf-8')
-        manifest={'romforge_version':'0.2.0','file':path.name,'platform':'NES','format':'NES 2.0' if nes2 else 'iNES','mapper':mapper,'mapper_name':MAPPER_NAMES.get(mapper,'Unknown/less-common mapper'),'prg_banks_16kb':prg_banks,'chr_banks_8kb':chr_banks,'prg_bytes':len(prg),'chr_bytes':len(chrdata),'cpu_base_guess':f'${cpu_base:04X}','mirroring':'vertical' if f6&1 else 'horizontal','battery':bool(f6&2),'trainer':trainer,'vectors':{'NMI':f'${nmi:04X}' if nmi is not None else None,'RESET':f'${reset:04X}' if reset is not None else None,'IRQ_BRK':f'${irq:04X}' if irq is not None else None},'analysis':{'printable_string_runs':len(strings),'ppu_access_points':len(ppu_hits),'apu_access_points':len(apu_hits),'audio_candidate_regions':len(audio_regions),'pointer_candidates':len(pointers),'classified_regions':len(regions)},'hashes':{'md5':hashlib.md5(data).hexdigest(),'sha1':hashlib.sha1(data).hexdigest()}}
+        manifest={'romforge_version':'0.3.0-dev','file':path.name,'platform':'NES','format':'NES 2.0' if nes2 else 'iNES','mapper':mapper,'mapper_name':MAPPER_NAMES.get(mapper,'Unknown/less-common mapper'),'prg_banks_16kb':prg_banks,'chr_banks_8kb':chr_banks,'prg_bytes':len(prg),'chr_bytes':len(chrdata),'cpu_base_guess':f'${cpu_base:04X}','mirroring':'vertical' if f6&1 else 'horizontal','battery':bool(f6&2),'trainer':trainer,'vectors':{'NMI':f'${nmi:04X}' if nmi is not None else None,'RESET':f'${reset:04X}' if reset is not None else None,'IRQ_BRK':f'${irq:04X}' if irq is not None else None},'analysis':{'printable_string_runs':len(strings),'ppu_access_points':len(ppu_hits),'apu_access_points':len(apu_hits),'audio_candidate_regions':len(audio_regions),'pointer_candidates':len(pointers),'metasprite_candidates':len(metasprites),'classified_regions':len(regions)},'hashes':{'md5':hashlib.md5(data).hexdigest(),'sha1':hashlib.sha1(data).hexdigest()}}
         (output/'manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
         write_analysis_report(output/'Analysis/REPORT.md',manifest,regions,entropy_rows)
